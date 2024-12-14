@@ -1,32 +1,52 @@
 name: Deploy to DigitalOcean
+
 on:
   push:
-    branches: [ main ]
+    branches: 
+      - main
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
+    
     steps:
-      - uses: actions/checkout@v3
-      
-      - name: Install Node.js
-        uses: actions/setup-node@v3
-        with:
-          node-version: '18'
-
-      - name: Deploy to DigitalOcean
-        uses: appleboy/ssh-action@master
-        with:
-          host: ${{ secrets.DROPLET_HOST }}
-          username: root
-          key: ${{ secrets.DROPLET_SSH_KEY }}
-          debug: true
-          script: |
-            cd /root/my-directus-project
-            git stash
-            git pull origin main
-            npm install
-            cp ecosystem.config.js .
-            PM2_HOME=/root/.pm2 pm2 delete all || true
-            PM2_HOME=/root/.pm2 pm2 start ecosystem.config.js
-            PM2_HOME=/root/.pm2 pm2 save
+    - name: Checkout code
+      uses: actions/checkout@v3
+    
+    - name: Setup Node.js
+      uses: actions/setup-node@v3
+      with:
+        node-version: '18'
+        cache: 'npm'
+    
+    - name: Install dependencies
+      run: npm ci
+    
+    - name: Deploy to server
+      uses: appleboy/ssh-action@master
+      env:
+        DB_CLIENT: ${{ secrets.DB_CLIENT }}
+        DB_HOST: ${{ secrets.DB_HOST }}
+        DB_PORT: ${{ secrets.DB_PORT }}
+        DB_DATABASE: ${{ secrets.DB_DATABASE }}
+        DB_USER: ${{ secrets.DB_USER }}
+        DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
+        OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+        REPLICATE_API_TOKEN: ${{ secrets.REPLICATE_API_TOKEN }}
+        DO_SPACES_ENDPOINT: ${{ secrets.DO_SPACES_ENDPOINT }}
+        DO_SPACES_KEY: ${{ secrets.DO_SPACES_KEY }}
+        DO_SPACES_SECRET: ${{ secrets.DO_SPACES_SECRET }}
+        KEY: ${{ secrets.KEY }}
+        SECRET: ${{ secrets.SECRET }}
+        ADMIN_EMAIL: ${{ secrets.ADMIN_EMAIL }}
+        ADMIN_PASSWORD: ${{ secrets.ADMIN_PASSWORD }}
+      with:
+        host: 161.35.70.99
+        username: root
+        key: ${{ secrets.DROPLET_SSH_KEY }}
+        script: |
+          cd /path/to/your/project
+          git pull origin main
+          npm install
+          npm run build
+          pm2 restart directus

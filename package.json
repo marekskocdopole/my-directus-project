@@ -4,20 +4,20 @@
   "description": "",
   "main": "index.js",
   "type": "module",
-
   "scripts": {
-  "start": "directus start",
-  "bootstrap": "directus bootstrap",
-  "init": "directus init",
-  "dev": "nodemon --exec 'directus start'",
-  "migrate": "directus database migrate",
-  "lint": "eslint .",
-  "format": "prettier --write .",
-  "start:env": "dotenv -e .env directus start",
-  "build": "directus build"
+    "start": "directus start",
+    "bootstrap": "directus bootstrap",
+    "init": "directus init",
+    "dev": "nodemon --exec 'directus start'",
+    "migrate": "directus database migrate",
+    "lint": "eslint .",
+    "format": "prettier --write .",
+    "start:env": "dotenv -e .env directus start",
+    "build": "directus build"
   },
   "dependencies": {
     "directus": "^11.3.2",
+    "dotenv": "^16.4.7",
     "pg": "^8.13.1"
   },
   "devDependencies": {
