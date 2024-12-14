@@ -1,115 +1,68 @@
-import { Pool } from 'pg';
-import type { Farm, Product } from '@/types';
+import pg from 'pg';
+import type { Pool as PoolType } from 'pg';
 import dotenv from 'dotenv';
+import path from 'path';
+import { fileURLToPath } from 'url';
+import fs from 'fs';
 
-dotenv.config();
+console.log('Začínám načítat DatabaseService');
+
+// Řešení pro ES moduly
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+// Explicitní načtení .env souboru
+const envPath = path.resolve(__dirname, '../../../.env');
+console.log('Hledám .env soubor na cestě:', envPath);
+
+if (fs.existsSync(envPath)) {
+    console.log('.env soubor nalezen');
+    dotenv.config({ path: envPath });
+} else {
+    console.error('.env soubor nebyl nalezen!');
+}
+
+// Výpis všech načtených proměnných prostředí
+console.log('Proměnné prostředí pro databázi:', {
+    DB_HOST: process.env.DB_HOST,
+    DB_PORT: process.env.DB_PORT,
+    DB_DATABASE: process.env.DB_DATABASE,
+    DB_USER: process.env.DB_USER
+});
 
 export class DatabaseService {
-    private pool: Pool;
+    private pool: PoolType;
 
     constructor() {
-        this.pool = new Pool({
+        console.log('Vytvářím připojení k databázi');
+        
+        // Přidáme další kontroly před vytvořením připojení
+        if (!process.env.DB_HOST) {
+            throw new Error('DB_HOST není nastaven v prostředí');
+        }
+
+        this.pool = new pg.Pool({
             user: process.env.DB_USER,
             host: process.env.DB_HOST,
             database: process.env.DB_DATABASE,
             password: process.env.DB_PASSWORD,
             port: parseInt(process.env.DB_PORT || '5432'),
         });
+
+        console.log('Připojení k databázi vytvořeno');
     }
 
-    // Metody pro práci s farmami
-    async getFarms(): Promise<Farm[]> {
-        const query = `
-            SELECT * 
-            FROM product_generator_farms 
-            ORDER BY created_at DESC
-        `;
-        const result = await this.pool.query(query);
-        return result.rows;
+    async testConnection(): Promise<void> {
+        try {
+            console.log('Zkouším připojení k databázi...');
+            const result = await this.pool.query('SELECT NOW()');
+            console.log('Připojení k databázi je funkční:', result.rows[0]);
+        } catch (error) {
+            console.error('Chyba při připojení k databázi:', error);
+            throw error;
+        }
     }
 
-    async createFarm(name: string, farmId: string, importFile?: string): Promise<Farm> {
-        const query = `
-            INSERT INTO product_generator_farms 
-            (name, farm_id, import_file)
-            VALUES ($1, $2, $3)
-            RETURNING *
-        `;
-        const result = await this.pool.query(query, [name, farmId, importFile]);
-        return result.rows[0];
-    }
-
-    // Metody pro práci s produkty
-    async getProducts(farmId: string): Promise<Product[]> {
-        const query = `
-            SELECT * 
-            FROM product_generator_products 
-            WHERE farm_id = $1 
-            ORDER BY created_at DESC
-        `;
-        const result = await this.pool.query(query, [farmId]);
-        return result.rows;
-    }
-
-    async createProduct(product: Partial<Product>): Promise<Product> {
-        const query = `
-            INSERT INTO product_generator_products (
-                farm_id, 
-                name, 
-                shop_sku, 
-                generated_short_description, 
-                generated_long_description,
-                ingredients, 
-                selected_image_url, 
-                image_generation_attempts,
-                status
-            )
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-            RETURNING *
-        `;
-        
-        const values = [
-            product.farm_id,
-            product.name,
-            product.shop_sku,
-            product.generated_short_description || '',
-            product.generated_long_description || '',
-            product.ingredients || '',
-            product.selected_image_url || '',
-            JSON.stringify(product.image_generation_attempts || []),
-            product.status || 'draft'
-        ];
-
-        const result = await this.pool.query(query, values);
-        return result.rows[0];
-    }
-
-    async updateProduct(id: string, product: Partial<Product>): Promise<Product> {
-        const setStatements: string[] = [];
-        const values: any[] = [];
-        let paramCounter = 1;
-
-        Object.entries(product).forEach(([key, value]) => {
-            if (value !== undefined && key !== 'id') {
-                setStatements.push(`${key} = $${paramCounter}`);
-                values.push(value);
-                paramCounter++;
-            }
-        });
-
-        const query = `
-            UPDATE product_generator_products 
-            SET ${setStatements.join(', ')}, updated_at = NOW()
-            WHERE id = $${paramCounter}
-            RETURNING *
-        `;
-        values.push(id);
-
-        const result = await this.pool.query(query, values);
-        return result.rows[0];
-    }
-
-    // Inicializace databáze
     async createTables(): Promise<void> {
         try {
             // Nejdřív vytvoříme UUID rozšíření
@@ -127,35 +80,6 @@ export class DatabaseService {
                 );
             `);
 
-            // Vytvoříme tabulku products
-            await this.pool.query(`
-                CREATE TABLE IF NOT EXISTS product_generator_products (
-                    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-                    farm_id UUID REFERENCES product_generator_farms(id) ON DELETE CASCADE,
-                    name VARCHAR(255) NOT NULL,
-                    shop_sku VARCHAR(255) NOT NULL UNIQUE,
-                    generated_short_description TEXT,
-                    generated_long_description TEXT,
-                    ingredients TEXT,
-                    selected_image_url TEXT,
-                    image_generation_attempts JSONB DEFAULT '[]',
-                    status VARCHAR(50) DEFAULT 'draft',
-                    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-                    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
-                );
-            `);
-
-            // Vytvoříme indexy
-            await this.pool.query(`
-                CREATE INDEX IF NOT EXISTS idx_pg_products_farm_id 
-                ON product_generator_products(farm_id);
-            `);
-
-            await this.pool.query(`
-                CREATE INDEX IF NOT EXISTS idx_pg_products_shop_sku 
-                ON product_generator_products(shop_sku);
-            `);
-
             console.log('Tabulky byly úspěšně vytvořeny');
         } catch (error) {
             console.error('Chyba při vytváření tabulek:', error);
@@ -163,21 +87,9 @@ export class DatabaseService {
         }
     }
 
-    // Test připojení
-    async testConnection(): Promise<void> {
-        try {
-            const result = await this.pool.query('SELECT NOW()');
-            console.log('Připojení k databázi je funkční:', result.rows[0]);
-        } catch (error) {
-            console.error('Chyba při připojení k databázi:', error);
-            throw error;
-        }
+    async closeConnection(): Promise<void> {
+        await this.pool.end();
     }
 }
 
-// Inicializace a test
-const db = new DatabaseService();
-db.testConnection()
-    .then(() => db.createTables())
-    .then(() => console.log('Inicializace databáze dokončena'))
-    .catch(error => console.error('Chyba při inicializaci:', error));
+console.log('DatabaseService načten');

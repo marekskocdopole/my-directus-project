@@ -1,7 +1,8 @@
 {
   "compilerOptions": {
     "target": "ES2020",
-    "module": "CommonJS",
+    "module": "ESNext",
+    "moduleResolution": "node",
     "lib": ["es2020", "dom"],
     "outDir": "./dist",
     "rootDir": "./src",
@@ -22,10 +23,7 @@
   "include": ["src/**/*"],
   "exclude": ["node_modules", "dist"],
   "ts-node": {
-    "transpileOnly": true,
-    "files": true,
-    "compilerOptions": {
-      "module": "CommonJS"
-    }
+    "esm": true,
+    "experimentalSpecifierResolution": "node"
   }
 }
