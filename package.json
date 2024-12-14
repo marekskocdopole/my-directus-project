@@ -21,8 +21,9 @@
     "pg": "^8.13.1"
   },
   "devDependencies": {
-    "eslint": "^8.50.0",
-    "prettier": "^3.0.0"
+    "eslint": "^8.57.1",
+    "prettier": "^3.0.0",
+    "nodemon": "^3.0.0"  // Přidáno pro skript 'dev'
   },
   "engines": {
     "node": ">=18.0.0"
