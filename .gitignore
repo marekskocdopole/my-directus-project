@@ -1,0 +1,9 @@
+.env
+.DS_Store
+node_modules/
+dist/
+*.log
+uploads/
+*.tar.gz
+databaze-backup.sql
+my-directus-project@1.0.0

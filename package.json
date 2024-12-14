@@ -1,0 +1,25 @@
+{
+  "name": "my-directus-project",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+  "start": "directus start",
+  "bootstrap": "directus bootstrap",
+  "init": "directus init",
+  "dev": "nodemon --exec 'directus start'",
+  "migrate": "directus database migrate",
+  "lint": "eslint .",
+  "format": "prettier --write .",
+  "start:env": "dotenv -e .env directus start",
+  "build": "directus build"
+  },
+  "dependencies": {
+    "directus": "^11.3.2",
+    "pg": "^8.13.1"
+  },
+  "devDependencies": {
+    "eslint": "^8.50.0",
+    "prettier": "^3.0.0"
+  }
+}
