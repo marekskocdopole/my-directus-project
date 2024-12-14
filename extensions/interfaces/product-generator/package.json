@@ -2,13 +2,15 @@
   "name": "directus-extension-product-generator",
   "version": "1.0.0",
   "description": "Directus extension pro generování produktových popisků a obrázků",
-  "type": "module",
+
   "keywords": [
     "directus",
     "directus-extension",
     "interface",
     "product-generator"
   ],
+  "type": "module",
+
   "directus:extension": {
     "type": "interface",
     "path": "dist/index.js",
