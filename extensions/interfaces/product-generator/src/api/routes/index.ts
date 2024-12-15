@@ -1,3 +1,5 @@
+// src/api/routes/index.ts
+
 import express from 'express';
 import multer from 'multer';
 import { ProductController } from '../controllers/ProductController';
@@ -8,52 +10,52 @@ const router = express.Router();
 const upload = multer({ dest: 'uploads/' });
 const productController = new ProductController();
 
-// Schémata pro validaci
+// Schemas for validation
 const farmSchema = Joi.object({
-  name: Joi.string().required(),
-  farmId: Joi.string().required(),
-  file: Joi.any()
+    name: Joi.string().required(),
+    farmId: Joi.string().required(),
+    file: Joi.any()
 });
 
 const productUpdateSchema = Joi.object({
-  generated_short_description: Joi.string().max(150).required(),
-  generated_long_description: Joi.string().min(100).required(),
-  selected_image_url: Joi.string().uri().required(),
-  status: Joi.string().valid('draft', 'in_progress', 'completed')
+    generated_short_description: Joi.string().max(150).required(),
+    generated_long_description: Joi.string().min(100).required(),
+    selected_image_url: Joi.string().uri().required(),
+    status: Joi.string().valid('draft', 'in_progress', 'completed')
 });
 
-// Farmy
-router.get('/farms', requireAuth, productController.getFarms);
+// Farms
+router.get('/farms', requireAuth, (req, res) => productController.getFarms(req, res));
 router.post('/farms', 
-  requireAuth, 
-  upload.single('file'), 
-  validateRequest(farmSchema),
-  productController.createFarm
+    requireAuth, 
+    upload.single('file'), 
+    validateRequest(farmSchema),
+    (req, res) => productController.createFarm(req, res)
 );
 
-// Produkty
-router.get('/farms/:farmId/products', requireAuth, productController.getProductsByFarm);
-router.get('/products/:id', requireAuth, productController.getProductById);
+// Products
+router.get('/farms/:farmId/products', requireAuth, (req, res) => productController.getProductsByFarm(req, res));
+router.get('/products/:id', requireAuth, (req, res) => productController.getProductById(req, res));
 
 router.post('/products/:productId/generate-descriptions', 
-  requireAuth, 
-  productController.generateDescriptions
+    requireAuth, 
+    (req, res) => productController.generateDescriptions(req, res)
 );
 
 router.post('/products/:productId/generate-images', 
-  requireAuth, 
-  productController.generateImages
+    requireAuth, 
+    (req, res) => productController.generateImages(req, res)
 );
 
 router.put('/products/:productId', 
-  requireAuth,
-  validateRequest(productUpdateSchema), 
-  productController.updateProduct
+    requireAuth,
+    validateRequest(productUpdateSchema), 
+    (req, res) => productController.updateProduct(req, res)
 );
 
 router.get('/products/:productId/history', 
-  requireAuth, 
-  productController.getProductHistory
+    requireAuth, 
+    (req, res) => productController.getProductHistory(req, res)
 );
 
 export default router;

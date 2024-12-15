@@ -1,5 +1,12 @@
+// src/components/AddFarmModal.tsx
 import React, { useState } from 'react';
-import { AlertDialog, AlertDialogAction, AlertDialogContent, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '../components/ui/alert-dialog';
+import {
+  AlertDialog,
+  AlertDialogContent,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle
+} from '../components/ui/alert-dialog';
 import { Alert, AlertDescription } from '../components/ui/alert';
 import { Upload, Loader2 } from 'lucide-react';
 
@@ -9,8 +16,8 @@ interface AddFarmModalProps {
   onSubmit: (formData: FormData) => Promise<void>;
 }
 
-const AddFarmModal = ({ isOpen, onClose, onSubmit }: AddFarmModalProps) => {
-  const [loading, setLoading] = useState(false);
+const AddFarmModal: React.FC<AddFarmModalProps> = ({ isOpen, onClose, onSubmit }) => {
+  const [loading, setLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
   const [file, setFile] = useState<File | null>(null);
 
@@ -32,17 +39,17 @@ const AddFarmModal = ({ isOpen, onClose, onSubmit }: AddFarmModalProps) => {
     try {
       const form = e.currentTarget;
       const formData = new FormData(form);
-      
-      // Validace
+
+      // Validation
       const name = formData.get('name') as string;
       const farmId = formData.get('farmId') as string;
-      
+
       if (!name || !farmId || !file) {
-        throw new Error('Vyplňte prosím všechna pole');
+        throw new Error('Vyplňte prosím všechna pole a nahrajte CSV soubor');
       }
-      
+
       formData.set('file', file);
-      
+
       await onSubmit(formData);
       onClose();
     } catch (err) {
@@ -59,7 +66,7 @@ const AddFarmModal = ({ isOpen, onClose, onSubmit }: AddFarmModalProps) => {
           <AlertDialogTitle>Přidat novou farmu</AlertDialogTitle>
         </AlertDialogHeader>
 
-        <form onSubmit={handleSubmit} className="space-y-4">
+        <form onSubmit={handleSubmit} className="space-y-4" encType="multipart/form-data">
           <div>
             <label htmlFor="name" className="block text-sm font-medium text-gray-700">
               Název farmy
@@ -92,7 +99,7 @@ const AddFarmModal = ({ isOpen, onClose, onSubmit }: AddFarmModalProps) => {
             <label className="block text-sm font-medium text-gray-700">
               CSV soubor s produkty
             </label>
-            <div className="mt-1 flex justify-center rounded-md border-2 border-dashed border-gray-300 px-6 py-4">
+            <div className="mt-1 flex justify-center rounded-md border-2 border-dashed border-gray-300 px-6 py-4 relative">
               <div className="text-center">
                 {file ? (
                   <div className="text-sm text-gray-600">{file.name}</div>

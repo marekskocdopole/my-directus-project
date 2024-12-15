@@ -1,48 +1,90 @@
+// src/api/services/ProductGeneratorService.ts
+
+import fs from 'fs';
+import csv from 'csv-parser';
 import { DatabaseService } from './DatabaseService';
-import { OpenAI } from 'openai';
-import { Replicate } from 'replicate';
+import { Configuration, OpenAIApi } from 'openai'; // Corrected import
+import Replicate from 'replicate'; // Default import
 import { S3 } from '@aws-sdk/client-s3';
-import { Farm, Product } from '../types';
+import fetch from 'node-fetch'; // Ensure node-fetch is installed
 
 export class ProductGeneratorService {
     private db: DatabaseService;
-    private openai: OpenAI;
+    private openai: OpenAIApi;
     private replicate: Replicate;
     private s3: S3;
 
     constructor() {
         this.db = new DatabaseService();
-        this.openai = new OpenAI({
-            apiKey: process.env.OPENAI_API_KEY
+
+        // Initialize OpenAI
+        const configuration = new Configuration({
+            apiKey: process.env.OPENAI_API_KEY,
         });
+        this.openai = new OpenAIApi(configuration);
+
+        // Initialize Replicate
         this.replicate = new Replicate({
-            auth: process.env.REPLICATE_API_TOKEN
+            auth: process.env.REPLICATE_API_TOKEN,
         });
+
+        // Initialize S3 (DigitalOcean Spaces)
         this.s3 = new S3({
             endpoint: process.env.DO_SPACES_ENDPOINT,
             credentials: {
-                accessKeyId: process.env.DO_SPACES_KEY,
-                secretAccessKey: process.env.DO_SPACES_SECRET
-            }
+                accessKeyId: process.env.DO_SPACES_KEY!,
+                secretAccessKey: process.env.DO_SPACES_SECRET!,
+            },
+            region: 'fra1',
         });
     }
 
-    // Metody pro práci s farmami
-    async getFarms(): Promise<Farm[]> {
-        return this.db.getFarms();
+    // Import products from CSV file
+    async importProductsFromCSV(filePath: string, farmId: string): Promise<void> {
+        return new Promise((resolve, reject) => {
+            const products: any[] = [];
+
+            fs.createReadStream(filePath)
+                .pipe(csv())
+                .on('data', (row) => {
+                    products.push(row);
+                })
+                .on('end', async () => {
+                    try {
+                        const pool = this.db.getPool(); // Use getter method
+
+                        for (const product of products) {
+                            const { name, shop_sku, ingredients } = product;
+
+                            if (!name || !shop_sku) {
+                                console.warn(`Produkt s názvem "${name}" a SKU "${shop_sku}" je nekompletní a nebude importován.`);
+                                continue;
+                            }
+
+                            await pool.query(
+                                `INSERT INTO product_generator_products (farm_id, name, shop_sku, ingredients) VALUES ($1, $2, $3, $4)`,
+                                [farmId, name, shop_sku, ingredients || null]
+                            );
+                        }
+                        resolve();
+                    } catch (error) {
+                        reject(error);
+                    }
+                })
+                .on('error', (error) => {
+                    reject(error);
+                });
+        });
     }
 
-    async createFarm(name: string, farmId: string, file: any): Promise<Farm> {
-        // Implementace nahrávání CSV souboru
-        return this.db.createFarm(name, farmId, file?.path);
-    }
-
-    // Metody pro generování popisků a obrázků
-    async generateDescriptions(product: Product): Promise<{
-        short_description: string;
-        long_description: string;
-    }> {
+    // Generate descriptions for a product
+    async generateDescriptions(productId: string): Promise<{ short_description: string; long_description: string }> {
         try {
+            const product = await this.db.getProductById(productId);
+            if (!product) {
+                throw new Error('Produkt nenalezen');
+            }
+
             const systemPrompt = `
                 Jsi zkušený copywriter specializující se na produktové popisky pro farmářské produkty. 
                 Piš přesné, informativní a stylisticky bezchybné popisy ve třetí osobě.
@@ -62,28 +104,32 @@ export class ProductGeneratorService {
                 5. Vyvaruj se přehnaně marketingového jazyka
             `;
 
-            const response = await this.openai.chat.completions.create({
+            const response = await this.openai.createChatCompletion({
                 model: "gpt-4",
                 messages: [
                     { role: "system", content: systemPrompt },
-                    { role: "user", content: userPrompt }
+                    { role: "user", content: userPrompt },
                 ],
                 max_tokens: 300,
-                temperature: 0.7
+                temperature: 0.7,
             });
 
-            const description = response.choices[0].message.content;
+            const description = response.data.choices[0].message?.content;
+            if (!description) {
+                throw new Error('OpenAI nevrátil žádný popis');
+            }
+
             const [shortDescription, longDescription] = this.parseDescription(description);
 
-            // Aktualizace produktu v databázi
+            // Update product in database
             await this.db.updateProduct(product.id, {
                 generated_short_description: shortDescription,
-                generated_long_description: longDescription
+                generated_long_description: longDescription,
             });
 
             return {
                 short_description: shortDescription,
-                long_description: longDescription
+                long_description: longDescription,
             };
         } catch (error) {
             console.error('Chyba při generování popisků:', error);
@@ -91,8 +137,14 @@ export class ProductGeneratorService {
         }
     }
 
-    async generateImages(product: Product): Promise<string[]> {
+    // Generate images for a product
+    async generateImages(productId: string): Promise<string[]> {
         try {
+            const product = await this.db.getProductById(productId);
+            if (!product) {
+                throw new Error('Produkt nenalezen');
+            }
+
             const prompt = `
                 Product photo of ${product.name}, 
                 high quality, professional product photography, 
@@ -105,15 +157,22 @@ export class ProductGeneratorService {
                 { input: { prompt } }
             );
 
+            if (!Array.isArray(output)) {
+                throw new Error('Replicate nevrátil pole URL');
+            }
+
             const uploadPromises = output.map(async (imageUrl: string, index: number) => {
                 const response = await fetch(imageUrl);
+                if (!response.ok) {
+                    throw new Error(`Chyba při stahování obrázku: ${response.statusText}`);
+                }
                 const buffer = await response.arrayBuffer();
 
                 const key = `products/${product.shop_sku}_${index}.jpg`;
                 await this.s3.putObject({
                     Bucket: process.env.DO_SPACES_BUCKET!,
                     Key: key,
-                    Body: buffer,
+                    Body: Buffer.from(buffer),
                     ContentType: 'image/jpeg',
                     ACL: 'public-read'
                 });
@@ -123,7 +182,7 @@ export class ProductGeneratorService {
 
             const uploadedUrls = await Promise.all(uploadPromises);
 
-            // Aktualizace produktu v databázi
+            // Update product in database
             await this.db.updateProduct(product.id, {
                 image_generation_attempts: [
                     ...(product.image_generation_attempts || []),
@@ -131,7 +190,7 @@ export class ProductGeneratorService {
                         id: Date.now().toString(),
                         urls: uploadedUrls,
                         selected: false,
-                        created_at: new Date()
+                        created_at: new Date(),
                     }
                 ]
             });
@@ -143,9 +202,10 @@ export class ProductGeneratorService {
         }
     }
 
+    // Helper method to parse descriptions
     private parseDescription(fullDescription: string): [string, string] {
         const lines = fullDescription.split('\n').filter(line => line.trim() !== '');
-        
+
         const shortDescription = lines[0]?.trim().slice(0, 150) || '';
         const longDescription = lines.slice(1).join(' ').trim().slice(0, 300);
 
